@@ -1,8 +1,8 @@
 import asyncio
 import logging
 import sys
+import requests
 
-import httpx
 from aiogram import Bot, Dispatcher, F
 from aiogram.filters import CommandStart
 from aiogram.types import Message
@@ -14,16 +14,13 @@ except (ImportError, ValueError) as e:
     print(f"Configuration import error: {e}")
     sys.exit(1)
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
 
-async def translate_content(text: str) -> str | None:
-    if not text:
-        return ""
-
+def sync_translate_request(text: str) -> str | None:
     headers = {
         "Authorization": f"DeepL-Auth-Key {DEEPL_API_KEY}",
         "Content-Type": "application/json",
@@ -32,80 +29,87 @@ async def translate_content(text: str) -> str | None:
         "text": [text],
         "target_lang": "EN",
     }
-
     try:
-        async with httpx.AsyncClient() as client:
-            response = await client.post(DEEPL_API_URL, json=payload, headers=headers)
-            response.raise_for_status()
-            
-            deepl_api_response = response.json()
-            translated_text = deepl_api_response["translations"][0]["text"]
-            return translated_text
-            
-    except httpx.HTTPStatusError as e:
-        logging.error(f"DeepL API error: {e.response.status_code} - {e.response.text}")
-    except Exception as e:
-        logging.error(f"An error occurred during translation: {e}")
-        
-    return None
+        response = requests.post(DEEPL_API_URL, json=payload, headers=headers)
+        response.raise_for_status()
+        result = response.json()
+        return result["translations"][0]["text"]
+    except requests.RequestException as e:
+        logging.error(f"DeepL API request error: {e}")
+        return None
+
+async def translate_text(text: str) -> str | None:
+    if not text:
+        return ""
+    return await asyncio.to_thread(sync_translate_request, text)
 
 
 @dp.channel_post(F.chat.id == SOURCE_CHANNEL_ID)
-async def process_source_channel_post(message: Message):
-    content_to_process = message.text or message.caption or ""
-    add_backlink_to_original = False
+async def handle_channel_post(message: Message):
+    original_text = message.text or message.caption or ""
+    add_link_back = False
 
-    if content_to_process.endswith('@'):
-        add_backlink_to_original = True
-        cleaned_content = content_to_process[:-1].strip()
+    if original_text.endswith('@'):
+        add_link_back = True
+        text_to_translate = original_text[:-1].strip()
     else:
-        cleaned_content = content_to_process
+        text_to_translate = original_text
 
-    translated_text = await translate_content(cleaned_content)
+    translated_text = await translate_text(text_to_translate)
 
     if translated_text is None:
-        logging.warning(f"Failed to translate message ID: {message.message_id}")
+        logging.warning(f"Could not translate message ID: {message.message_id}")
         return
 
+    sent_message = None
     try:
-        sent_message_in_target = await message.copy(
-            chat_id=TARGET_CHANNEL_ID,
-            text=translated_text if message.text else None,
-            caption=translated_text if message.caption else None,
-        )
-        logging.info(f"Message {message.message_id} successfully translated and sent to target channel.")
+        if message.text:
+            sent_message = await bot.send_message(
+                chat_id=TARGET_CHANNEL_ID,
+                text=translated_text,
+                parse_mode=None
+            )
+        else:
+            sent_message = await message.send_copy(
+                chat_id=TARGET_CHANNEL_ID,
+                caption=translated_text,
+                parse_mode=None
+            )
+        logging.info(f"Message {message.message_id} successfully translated and sent.")
     except Exception as e:
-        logging.error(f"Failed to send translated message to target channel: {e}")
+        logging.error(f"Failed to send message to target channel: {e}")
         return
 
-    if add_backlink_to_original:
+    if add_link_back and sent_message:
         try:
-            link_to_translated_post = sent_message_in_target.get_url(quote=False)
-
-            backlink_markdown = f"\n\n[English Version]({link_to_translated_post})"
+            link_to_translation = sent_message.get_url(quote=False)
+            link_text = f"\n\n[English Version]({link_to_translation})"
             
+            new_text_content = text_to_translate + link_text
+
             if message.text:
                 await bot.edit_message_text(
-                    text=cleaned_content + backlink_markdown,
+                    text=new_text_content,
                     chat_id=message.chat.id,
                     message_id=message.message_id,
                     parse_mode="Markdown"
                 )
             elif message.caption:
                 await bot.edit_message_caption(
-                    caption=cleaned_content + backlink_markdown,
+                    caption=new_text_content,
                     chat_id=message.chat.id,
                     message_id=message.message_id,
                     parse_mode="Markdown"
                 )
-            logging.info(f"Backlink added to original message {message.message_id}")
+            logging.info(f"Link back added to original message {message.message_id}")
         except Exception as e:
-            logging.error(f"Failed to edit original message: {e}")
+            logging.error(f"Failed to edit original message to add link back: {e}")
 
 
 @dp.message(CommandStart())
-async def start_command_handler(message: Message) -> None:
-    await message.answer("Hi!")
+async def command_start_handler(message: Message) -> None:
+    await message.answer("Hello! I am a bot for translating channel posts. ")
+
 
 async def main() -> None:
     await bot.delete_webhook(drop_pending_updates=True)
@@ -116,4 +120,4 @@ if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("Bot stopped.")
+        print("Bot stopped by user.")
