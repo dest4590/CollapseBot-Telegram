@@ -68,11 +68,41 @@ async def handle_channel_post(message: Message):
         return
 
     try:
-        sent_message = await message.copy(
-            chat_id=TARGET_CHANNEL_ID,
-            text=translated_text if message.text else None,
-            caption=translated_text if message.caption else None,
-        )
+        if message.text:
+            sent_message = await bot.send_message(
+                chat_id=TARGET_CHANNEL_ID,
+                text=translated_text
+            )
+        elif message.caption:
+            if message.photo:
+                sent_message = await bot.send_photo(
+                    chat_id=TARGET_CHANNEL_ID,
+                    photo=message.photo[-1].file_id,
+                    caption=translated_text
+                )
+            elif message.video:
+                sent_message = await bot.send_video(
+                    chat_id=TARGET_CHANNEL_ID,
+                    video=message.video.file_id,
+                    caption=translated_text
+                )
+            elif message.document:
+                sent_message = await bot.send_document(
+                    chat_id=TARGET_CHANNEL_ID,
+                    document=message.document.file_id,
+                    caption=translated_text
+                )
+            else:
+                sent_message = await bot.send_message(
+                    chat_id=TARGET_CHANNEL_ID,
+                    text=translated_text
+                )
+        else:
+            sent_message = await bot.send_message(
+                chat_id=TARGET_CHANNEL_ID,
+                text=translated_text
+            )
+        
         logging.info(f"Message {message.message_id} translated and sent successfully.")
     except Exception as e:
         logging.error(f"Failed to send message to the target channel: {e}")
