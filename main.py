@@ -68,39 +68,63 @@ async def handle_channel_post(message: Message):
         return
 
     try:
-        if message.text:
-            sent_message = await bot.send_message(
+        if message.photo:
+            sent_message = await bot.send_photo(
                 chat_id=TARGET_CHANNEL_ID,
-                text=translated_text
+                photo=message.photo[-1].file_id,
+                caption=translated_text,
+                caption_entities=message.caption_entities
             )
-        elif message.caption:
-            if message.photo:
-                sent_message = await bot.send_photo(
-                    chat_id=TARGET_CHANNEL_ID,
-                    photo=message.photo[-1].file_id,
-                    caption=translated_text
-                )
-            elif message.video:
-                sent_message = await bot.send_video(
-                    chat_id=TARGET_CHANNEL_ID,
-                    video=message.video.file_id,
-                    caption=translated_text
-                )
-            elif message.document:
-                sent_message = await bot.send_document(
-                    chat_id=TARGET_CHANNEL_ID,
-                    document=message.document.file_id,
-                    caption=translated_text
-                )
-            else:
-                sent_message = await bot.send_message(
-                    chat_id=TARGET_CHANNEL_ID,
-                    text=translated_text
-                )
+        elif message.video:
+            sent_message = await bot.send_video(
+                chat_id=TARGET_CHANNEL_ID,
+                video=message.video.file_id,
+                caption=translated_text,
+                caption_entities=message.caption_entities
+            )
+        elif message.document:
+            sent_message = await bot.send_document(
+                chat_id=TARGET_CHANNEL_ID,
+                document=message.document.file_id,
+                caption=translated_text,
+                caption_entities=message.caption_entities
+            )
+        elif message.audio:
+            sent_message = await bot.send_audio(
+                chat_id=TARGET_CHANNEL_ID,
+                audio=message.audio.file_id,
+                caption=translated_text,
+                caption_entities=message.caption_entities
+            )
+        elif message.voice:
+            sent_message = await bot.send_voice(
+                chat_id=TARGET_CHANNEL_ID,
+                voice=message.voice.file_id,
+                caption=translated_text,
+                caption_entities=message.caption_entities
+            )
+        elif message.video_note:
+            sent_message = await bot.send_video_note(
+                chat_id=TARGET_CHANNEL_ID,
+                video_note=message.video_note.file_id
+            )
+        elif message.sticker:
+            sent_message = await bot.send_sticker(
+                chat_id=TARGET_CHANNEL_ID,
+                sticker=message.sticker.file_id
+            )
+        elif message.animation:
+            sent_message = await bot.send_animation(
+                chat_id=TARGET_CHANNEL_ID,
+                animation=message.animation.file_id,
+                caption=translated_text,
+                caption_entities=message.caption_entities
+            )
         else:
             sent_message = await bot.send_message(
                 chat_id=TARGET_CHANNEL_ID,
-                text=translated_text
+                text=translated_text,
+                entities=message.entities
             )
         
         logging.info(f"Message {message.message_id} translated and sent successfully.")
@@ -110,7 +134,7 @@ async def handle_channel_post(message: Message):
 
     if add_link_back:
         try:
-            link_to_translation = sent_message.get_url(quote=False)
+            link_to_translation = sent_message.get_url()
             link_text = f"\n\n[English Version]({link_to_translation})"
             
             if message.text:
