@@ -7,4 +7,8 @@ COPY . /app
 
 WORKDIR /app
 
+RUN mkdir -p /app/config && \
+    echo "[settings]" > /app/config/config.ini && \
+    echo "translation_enabled = true" >> /app/config/config.ini
+
 CMD ["python", "main.py"]

@@ -10,8 +10,7 @@ TARGET_CHANNEL_ID = os.getenv("TARGET_CHANNEL_ID")
 
 if not all([BOT_TOKEN, DEEPL_API_KEY, SOURCE_CHANNEL_ID, TARGET_CHANNEL_ID]):
     raise ValueError(
-        "Одна или несколько переменных окружения не установлены. "
-        "Пожалуйста, проверьте ваш .env файл."
+        "One or more environment variables are not set. " "Please check your .env file."
     )
 
 try:
