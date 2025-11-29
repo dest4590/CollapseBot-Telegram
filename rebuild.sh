@@ -1,5 +1,5 @@
 git pull
-docker stop collapsebob-tg
-docker remove collapsebob-tg
-docker build -t collapse/bot-tg .
-docker run -d --name collapsebob-tg --restart always collapse/bot-tg
+docker build --tag=collapsebob-tg/sigma .
+docker kill collapsebob-tg
+docker rm collapsebob-tg
+docker run -d --name collapsebob-tg collapsebob-tg/sigma
