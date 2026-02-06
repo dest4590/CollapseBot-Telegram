@@ -23,7 +23,7 @@ dp = Dispatcher()
 @dp.message(CommandStart())
 async def cmd_start(message: types.Message):
     await message.answer(
-        "Hello! I am an inline bot. Type @CollapseBot to see my snippets."
+        "Hello! I am an inline bot. Type @CollapseLoader_bot to see my snippets."
     )
 
 
