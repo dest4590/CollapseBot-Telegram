@@ -1,3 +1,8 @@
+# Manager for CollapseBot
+# Author: W1xced
+# Version: 1.0
+# Description: Manager for bot
+
 import subprocess
 import sys
 import os
