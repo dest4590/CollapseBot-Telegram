@@ -35,6 +35,15 @@ installation:
 
         💡 **Совет:** Добавьте лоадер в исключения антивируса.
 
+social-link:
+    title: ' 💬 Наши соцсети'
+    content: |
+        ** 💬 Наши соцсети:**
+
+        - Telegram: https://t.me/collapseloader
+        - Telegram DevLogs: https://t.me/collapseloader_devlogs
+        - Discord: https://collapseloader.org/discord
+        
 technical-support:
     title: '🔧 Техническая поддержка'
     content: |
