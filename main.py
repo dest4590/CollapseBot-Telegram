@@ -39,6 +39,15 @@ async def cmd_start(message: types.Message):
         f"Hello! I am an inline bot. Type @{bot_info.username} in any chat to see my snippets."
     )
 
+import re
+import html
+
+def safe_format(text):
+    text = html.escape(text)
+    text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)
+    text = re.sub(r'\*(.*?)\*', r'<i>\1</i>', text)
+    return text
+
 @dp.inline_query()
 async def inline_query_handler(query: types.InlineQuery):
     query_text = query.query.lower().strip()
@@ -58,13 +67,15 @@ async def inline_query_handler(query: types.InlineQuery):
             if len(description) > 50:
                 description = description[:47] + "..."
 
+            formatted_content = safe_format(content)
+
             results.append(
                 InlineQueryResultArticle(
                     id=key,
                     title=title,
                     description=description,
                     input_message_content=InputTextMessageContent(
-                        message_text=content, parse_mode="Markdown"
+                        message_text=formatted_content, parse_mode="HTML"
                     ),
                 )
             )
