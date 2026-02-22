@@ -1,3 +1,8 @@
+# CollapseBot - Telegram Inline Bot
+# Author: dest4590, w1xced
+# Version: 1.1
+# Description: Telegram Inline Bot for snippets
+
 import asyncio
 import logging
 import yaml
