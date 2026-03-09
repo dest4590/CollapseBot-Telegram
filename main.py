@@ -1,8 +1,3 @@
-# CollapseBot - Telegram Inline Bot
-# Author: dest4590, w1xced
-# Version: 1.4
-# Description: Telegram Inline Bot with advanced statistics tracking and crash-safe workers
-
 import asyncio
 import logging
 import os
@@ -195,7 +190,10 @@ async def inline_query_handler(query: types.InlineQuery):
             )
         )
 
-    await query.answer(results[:50], cache_time=1)
+    try:
+        await query.answer(results[:50], cache_time=5)
+    except Exception as e:
+        logger.debug(f"Could not answer inline query: {e}")
 
 async def check_updates_task():
     last_tag = None
@@ -214,7 +212,6 @@ async def check_updates_task():
                 subs = get_subscribers()
                 for user_id in subs:
                     try:
-                        # We use Russian by default for broadcasts or check user preference if stored
                         await bot.send_message(
                             user_id, 
                             get_msg("new_update", "ru", tag=tag, url=url),
@@ -225,11 +222,15 @@ async def check_updates_task():
         except Exception as e:
             logger.error(f"Error in check_updates_task: {e}")
         
-        await asyncio.sleep(1800) # 30 mins
+        await asyncio.sleep(1800)
 
 async def main():
     bot_info = await bot.get_me()
     logger.info(f"Starting bot @{bot_info.username}")
+    asyncio.create_task(get_cached_status("ru"))
+    asyncio.create_task(get_cached_status("en"))
+    asyncio.create_task(get_cached_versions())
+
     asyncio.create_task(check_updates_task())
     await dp.start_polling(bot)
 
