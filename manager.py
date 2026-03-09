@@ -23,6 +23,7 @@ try:
     from rich import box
     from rich.align import Align
     from rich.style import Style
+    from rich.markup import escape
 except ImportError:
     print("Installing required UI packages...")
     subprocess.call([sys.executable, "-m", "pip", "install", "rich"])
@@ -33,21 +34,23 @@ except ImportError:
     from rich import box
     from rich.align import Align
     from rich.style import Style
+    from rich.markup import escape
 
 console = Console()
 log_buffer = deque(maxlen=20)
-full_logs = []
-stats = {"start_time": time.time(), "commands_executed": 0, "errors": 0}
+full_logs = deque(maxlen=500)
+log_counter = 0
+stats = {"start_time": time.time(), "engines_spawned": 0, "errors": 0}
 
 def log_reader(pipe):
+    global log_counter
     try:
         for line in iter(pipe.readline, ''):
             if not line: break
             decoded = line.strip()
             log_buffer.append(decoded)
             full_logs.append(decoded)
-            if len(full_logs) > 500:
-                full_logs.pop(0)
+            log_counter += 1
     except Exception:
         pass
     pipe.close()
@@ -80,9 +83,6 @@ signal.signal(signal.SIGTERM, signal_handler)
 
 def start_bot():
     global _current_bot_process
-    # We REMOVE CREATE_NO_WINDOW (0x08000000) so that the process is 
-    # part of the same job/console group. When the console is closed via 'X',
-    # Windows will terminate the entire process tree.
     process = subprocess.Popen(
         [sys.executable, "main.py", "--worker"], 
         stdout=subprocess.PIPE, 
@@ -92,7 +92,7 @@ def start_bot():
     )
     _current_bot_process = process
     threading.Thread(target=log_reader, args=(process.stdout,), daemon=True).start()
-    stats["commands_executed"] += 1
+    stats["engines_spawned"] += 1
     return process
 
 def draw_interface(bot_process):
@@ -122,10 +122,9 @@ def draw_interface(bot_process):
     status_table.add_column("Value", style="bold white", justify="left")
     
     status_table.add_row("Bot Service Layer :", f"[{status_color}]{status_text}[/]")
-    status_table.add_row("Interpreter Engine :", f"[dim #CAF0F8]{sys.version.split()[0]}[/]")
-    status_table.add_row("Working Directory :", f"[dim #CAF0F8]{os.path.basename(os.getcwd())}[/]")
+    status_table.add_row("Interpreter Engine :", f"[dim #CAF0F8]{escape(sys.version.split()[0])}[/]")
+    status_table.add_row("Working Directory :", f"[dim #CAF0F8]{escape(os.path.basename(os.getcwd()))}[/]")
 
-    # === ACTION CENTER ===
     controls = Table(box=box.MINIMAL, expand=True, show_header=False, border_style="#00B4D8")
     controls.add_column("Col1", justify="left")
     controls.add_column("Col2", justify="left")
@@ -147,7 +146,6 @@ def draw_interface(bot_process):
         ""
     )
 
-    
     layout = Table.grid(expand=True)
     layout.add_row(Align.center(header_text))
     
@@ -168,7 +166,6 @@ def draw_interface(bot_process):
     )
     layout.add_row(glass_controls)
 
-    
     return Panel(
         layout, 
         border_style="bold #00D4FF", 
@@ -226,20 +223,28 @@ def main_manager():
                 console.print(Panel("[bold #9370DB]🟢 LIVE ENGINE LOGS[/]\n[dim]Press ANY KEY to return to the main menu...[/]", border_style="#9370DB"))
                 
                 import msvcrt
-                last_idx = 0
-                if full_logs:
-                    start_idx = max(0, len(full_logs) - 30)
-                    for line in full_logs[start_idx:]:
-                        console.print(line)
-                    last_idx = len(full_logs)
-                    
+                # Выводим последние 30 строк из имеющейся истории
+                snapshot = list(full_logs)
+                for line in snapshot[-30:]:
+                    console.print(line)
+                
+                last_seen_total = log_counter
+                
                 while True:
                     if msvcrt.kbhit():
                         msvcrt.getch()
                         break
-                    while last_idx < len(full_logs):
-                        console.print(full_logs[last_idx])
-                        last_idx += 1
+                    
+                    if log_counter > last_seen_total:
+                        # Если пришли новые строки, печатаем их
+                        new_lines_count = log_counter - last_seen_total
+                        # Чтобы индекс не вышел за границы deque (500), берем минимум
+                        actual_to_print = min(new_lines_count, len(full_logs))
+                        current_all_logs = list(full_logs)
+                        for i in range(len(current_all_logs) - actual_to_print, len(current_all_logs)):
+                            console.print(current_all_logs[i])
+                        last_seen_total = log_counter
+                    
                     time.sleep(0.1)
                 
             elif choice == '5':
@@ -249,7 +254,7 @@ def main_manager():
                 
                 stats_table = Table(box=box.ROUNDED, show_header=False, border_style="#FFA500")
                 stats_table.add_row("Session Uptime :", uptime)
-                stats_table.add_row("Engines Spawned :", str(stats["commands_executed"]))
+                stats_table.add_row("Engines Spawned :", str(stats["engines_spawned"]))
                 stats_table.add_row("Bot Starts (/start) :", str(bot_stats.get("start_count", 0)))
                 stats_table.add_row("Snippets Searched :", str(bot_stats.get("snippet_searches", 0)))
                 stats_table.add_row("System Health :", "[bold #00FF7F]EXCELLENT[/]")
