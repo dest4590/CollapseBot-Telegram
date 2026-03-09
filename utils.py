@@ -33,7 +33,6 @@ def safe_format(text):
 import asyncio
 import json
 
-# i18n system
 TRANSLATIONS = {
     "ru": {
         "start": "🤖 <b>CollapseBot v1.4</b>\n\nВведите @{username} в любом чате для поиска сниппетов.\n\n<b>Команды:</b>\n📡 /status - Состояние серверов\n📦 /version - Версии лоадера\n🔔 /subscribe - Подписка на обновления\n🔕 /unsubscribe - Отписаться",
@@ -65,12 +64,37 @@ def get_msg(key, lang="ru", **kwargs):
     lang = lang if lang in TRANSLATIONS else "ru"
     return TRANSLATIONS[lang].get(key, key).format(**kwargs)
 
+_cache_locks = {
+    "status": asyncio.Lock(),
+    "version": asyncio.Lock()
+}
+
 async def get_cached_status(lang="ru"):
     now = time.time()
-    # Cache key includes lang because status string is localized
     cache_key = f"status_{lang}"
+    
+    # If we have data and it's not super old, return it instantly
     if cache_key in cache and now - cache[cache_key]["time"] < 60:
         return cache[cache_key]["data"]
+    
+    # If we have data but it's expired, we still return it but trigger refresh in background
+    # However, for the very first call, we must wait.
+    if cache_key in cache and cache[cache_key]["data"]:
+        # Trigger refresh in background if not already locked
+        if not _cache_locks["status"].locked():
+            asyncio.create_task(refresh_status_cache(lang))
+        return cache[cache_key]["data"]
+
+    # First time or data missing - must wait
+    async with _cache_locks["status"]:
+        # Check again inside lock
+        if cache_key in cache and cache[cache_key]["data"]:
+            return cache[cache_key]["data"]
+        return await refresh_status_cache(lang)
+
+async def refresh_status_cache(lang="ru"):
+    now = time.time()
+    cache_key = f"status_{lang}"
     
     services = {
         "Atlas": "https://atlas.collapseloader.org",
@@ -90,19 +114,34 @@ async def get_cached_status(lang="ru"):
         except Exception:
             return f"❌ {name}: Offline"
 
-    async with httpx.AsyncClient(timeout=2.5) as client:
-        tasks = [check_service(name, url, client) for name, url in services.items()]
-        results = await asyncio.gather(*tasks)
-    
-    status = "\n".join(results)
-    cache[cache_key] = {"data": status, "time": now}
-    return status
+    try:
+        async with httpx.AsyncClient(timeout=2.5) as client:
+            tasks = [check_service(name, url, client) for name, url in services.items()]
+            results = await asyncio.gather(*tasks)
+        
+        status = "\n".join(results)
+        cache[cache_key] = {"data": status, "time": now}
+        return status
+    except Exception as e:
+        logger.error(f"Error refreshing status cache: {e}")
+        return cache.get(cache_key, {}).get("data", "❌ Error fetching status")
 
 async def get_cached_versions():
     now = time.time()
-    if cache["version"]["data"] and now - cache["version"]["time"] < 300:
+    if cache["version"]["data"]:
+        if now - cache["version"]["time"] > 300:
+            if not _cache_locks["version"].locked():
+                asyncio.create_task(refresh_version_cache())
         return cache["version"]["data"]
     
+    # No data - must wait
+    async with _cache_locks["version"]:
+        if cache["version"]["data"]:
+            return cache["version"]["data"]
+        return await refresh_version_cache()
+
+async def refresh_version_cache():
+    now = time.time()
     try:
         url_latest = "https://api.github.com/repos/dest4590/collapseloader/releases/latest"
         url_all = "https://api.github.com/repos/dest4590/collapseloader/releases"
@@ -120,10 +159,10 @@ async def get_cached_versions():
             }
             cache["version"] = {"data": result, "time": now}
             return result
-    except Exception:
-        return {"latest": ("N/A", ""), "pre": ("N/A", "")}
+    except Exception as e:
+        logger.error(f"Error refreshing version cache: {e}")
+        return cache["version"]["data"] or {"latest": ("N/A", ""), "pre": ("N/A", "")}
 
-# Subscriptions
 SUBS_FILE = "subscribers.json"
 
 def get_subscribers():
