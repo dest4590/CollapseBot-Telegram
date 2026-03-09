@@ -73,21 +73,15 @@ async def get_cached_status(lang="ru"):
     now = time.time()
     cache_key = f"status_{lang}"
     
-    # If we have data and it's not super old, return it instantly
     if cache_key in cache and now - cache[cache_key]["time"] < 60:
         return cache[cache_key]["data"]
     
-    # If we have data but it's expired, we still return it but trigger refresh in background
-    # However, for the very first call, we must wait.
     if cache_key in cache and cache[cache_key]["data"]:
-        # Trigger refresh in background if not already locked
         if not _cache_locks["status"].locked():
             asyncio.create_task(refresh_status_cache(lang))
         return cache[cache_key]["data"]
 
-    # First time or data missing - must wait
     async with _cache_locks["status"]:
-        # Check again inside lock
         if cache_key in cache and cache[cache_key]["data"]:
             return cache[cache_key]["data"]
         return await refresh_status_cache(lang)
@@ -97,9 +91,7 @@ async def refresh_status_cache(lang="ru"):
     cache_key = f"status_{lang}"
     
     services = {
-        "Atlas": "https://atlas.collapseloader.org",
-        "Auth": "https://auth.collapseloader.org",
-        "API": "https://api.collapseloader.org"
+        "Atlas": "https://atlas.collapseloader.org"
     }
 
     async def check_service(name, url, client):
@@ -134,7 +126,6 @@ async def get_cached_versions():
                 asyncio.create_task(refresh_version_cache())
         return cache["version"]["data"]
     
-    # No data - must wait
     async with _cache_locks["version"]:
         if cache["version"]["data"]:
             return cache["version"]["data"]
