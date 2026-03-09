@@ -117,7 +117,7 @@ not-loading-method-2:
     content: |
         **Если лоадер не запускается (зависает в экране загрузки, пишет что сервера офлайн)**
 
-        1. Добавьте в запрет-лист эти адреса: https://auth.collapseloader.org и https://cdn.collapseloader.org и https://api.collapseloader.org и https://atlas.collapseloader.org
+        1. Добавьте в запрет-лист этот адреса: https://atlas.collapseloader.org
         2. Если вам не помогло, попробуйте подключиться через VPN
 
 Tu-ceryezno?:
