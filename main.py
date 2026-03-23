@@ -105,9 +105,9 @@ async def inline_query_handler(query: types.InlineQuery):
         {
             "id": "dynamic_status",
             "title": f"📡 {get_msg('status_title', lang).replace('<b>', '').replace('</b>', '')} {status_summary}",
-            "description": "Atlas, Auth, API",
+            "description": "Atlas Status",
             "msg": f"{get_msg('status_title', lang)}\n\n{status_val}",
-            "keywords": ["status", "статус", "сервер", "server", "атлас", "atlas", "auth", "api"]
+            "keywords": ["status", "статус", "сервер", "server", "атлас", "atlas"]
         },
         {
             "id": "dynamic_versions",
