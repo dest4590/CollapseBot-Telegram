@@ -11,7 +11,8 @@ logger = logging.getLogger(__name__)
 cache = {
     "status": {"data": None, "time": 0},
     "version": {"data": None, "time": 0},
-    "clients": {"data": None, "time": 0}
+    "clients": {"data": None, "time": 0},
+    "clients_raw": {"data": {}, "time": 0}
 }
 
 def load_snippets():
@@ -36,8 +37,8 @@ import json
 
 TRANSLATIONS = {
     "ru": {
-        "start": "<b>CollapseBot v1.4</b>\n\nВведите @{username} в любом чате для поиска сниппетов.\n\n<b>Команды:</b>\n/status - Состояние серверов\n/version - Версии лоадера\n/clients - Доступные клиенты\n/subscribe - Подписка на обновления\n/unsubscribe - Отписаться\n/help - Справка",
-        "help": "<b>Справка по CollapseBot:</b>\n\n<b>Основные команды:</b>\n/status - Текущее состояние серверов Atlas\n/version - Версии лоадера (stable / pre-release)\n/clients - Выборка доступных клиентов (Vanilla, Fabric, Forge)\n\n<b>Уведомления:</b>\n/subscribe - Получать пуши о новых обновлениях и статусе серверов\n/unsubscribe - Отписаться от рассылки\n\n<b>Поиск параметров (Инлайн):</b>\nНапишите <code>@{username} запрос</code> в любом чате, чтобы найти нужное руководство или сниппет лоадера.",
+        "start": "<b>CollapseBot v1.5</b>\n\nВведите @{username} в любом чате для поиска сниппетов.\n\n<b>Команды:</b>\n/status - Состояние серверов\n/version - Версии лоадера\n/clients - Доступные клиенты\n/client <id> - Подробно о клиенте\n/changelog - Что нового\n/help - Справка",
+        "help": "<b>Справка по CollapseBot:</b>\n\n<b>Основные команды:</b>\n/status - Текущее состояние серверов Atlas\n/version - Версии лоадера (stable / pre-release)\n/clients - Выборка доступных клиентов (Vanilla, Fabric, Forge)\n\n<b>Лоадер и Клиенты:</b>\n/changelog - Посмотреть, что нового в свежей версии лоадера\n/client <code>&lt;id/название&gt;</code> - Детальная статистика по клиенту (запуски, статус)\n\n<b>Уведомления:</b>\n/subscribe - Получать пуши о новых обновлениях и статусе серверов\n/unsubscribe - Отписаться от рассылки\n\n<b>Поиск параметров (Инлайн):</b>\nНапишите <code>@{username} запрос</code> в любом чате, чтобы найти руководство или сниппет лоадера.",
         "status_title": "<b>Статус серверов Collapse:</b>",
         "version_title": "<b>Версии CollapseLoader:</b>",
         "stable": "<b>Стабильная:</b>",
@@ -51,8 +52,8 @@ TRANSLATIONS = {
         "clients_empty": "Нет доступных клиентов."
     },
     "en": {
-        "start": "<b>CollapseBot v1.4</b>\n\nType @{username} in any chat to search snippets.\n\n<b>Commands:</b>\n/status - Server status\n/version - Loader versions\n/clients - Available clients\n/subscribe - Subscribe to updates\n/unsubscribe - Unsubscribe\n/help - Help message",
-        "help": "<b>CollapseBot Help:</b>\n\n<b>Commands:</b>\n/status - Check Atlas server status\n/version - View loader versions\n/clients - View clients list \n\n<b>Notifications:</b>\n/subscribe - Get push notifications for updates & downtime\n/unsubscribe - Opt out of notifications\n\n<b>Inline Search:</b>\nType <code>@{username} [query]</code> in any chat to search loader snippets.",
+        "start": "<b>CollapseBot v1.5</b>\n\nType @{username} in any chat to search snippets.\n\n<b>Commands:</b>\n/status - Server status\n/version - Loader versions\n/clients - Available clients\n/client <id> - Client details\n/changelog - What's new\n/help - Help message",
+        "help": "<b>CollapseBot Help:</b>\n\n<b>Commands:</b>\n/status - Check Atlas server status\n/version - View loader versions\n/clients - View clients list \n\n<b>Loader & Clients:</b>\n/changelog - Check what's new in the latest loader update\n/client <code>&lt;id/name&gt;</code> - View detailed info about a specific client (launches, status)\n\n<b>Notifications:</b>\n/subscribe - Get push notifications for updates & downtime\n/unsubscribe - Opt out of notifications\n\n<b>Inline Search:</b>\nType <code>@{username} [query]</code> in any chat to search loader snippets.",
         "status_title": "<b>Collapse Server Status:</b>",
         "version_title": "<b>CollapseLoader Versions:</b>",
         "stable": "<b>Stable:</b>",
@@ -179,8 +180,8 @@ async def refresh_version_cache():
             pre = next((r for r in releases if r.get("prerelease")), None)
 
             result = {
-                "latest": (data_l.get("tag_name", "N/A"), data_l.get("html_url", "")),
-                "pre": (pre.get("tag_name", "N/A"), pre.get("html_url", "")) if pre else ("N/A", "")
+                "latest": (data_l.get("tag_name", "N/A"), data_l.get("html_url", ""), data_l.get("body", "Нет данных")),
+                "pre": (pre.get("tag_name", "N/A"), pre.get("html_url", ""), pre.get("body", "Нет данных")) if pre else ("N/A", "", "Нет данных")
             }
             cache["version"] = {"data": result, "time": now}
             return result
@@ -219,6 +220,7 @@ async def refresh_clients_cache(lang="ru"):
             client = await get_client()
             
             lines = []
+            raw_clients_map = {}
             for category, url in urls.items():
                 resp = await client.get(url)
                 if resp.status_code == 200:
@@ -231,6 +233,8 @@ async def refresh_clients_cache(lang="ru"):
                             version = c.get("version", "N/A")
                             client_id = c.get("id", "N/A")
                             lines.append(f"<b>{name}</b> (v{version}) - ID: {client_id}")
+                            raw_clients_map[str(client_id)] = c
+                            raw_clients_map[name.lower()] = c
                 else:
                     lines.append(f"\n<b>{category}</b>: Error {resp.status_code}")
                     
@@ -240,6 +244,7 @@ async def refresh_clients_cache(lang="ru"):
                 result = get_msg("clients_empty", lang)
                 
             cache[cache_key] = {"data": result, "time": now}
+            cache["clients_raw"] = {"data": raw_clients_map, "time": now}
             return result
         except Exception as e:
             logger.error(f"Error refreshing clients cache: {e}")
@@ -247,6 +252,15 @@ async def refresh_clients_cache(lang="ru"):
 
 
 SUBS_FILE = "subscribers.json"
+
+async def get_client_info(query):
+    now = time.time()
+    if not cache["clients_raw"]["data"] or now - cache["clients_raw"]["time"] > 300:
+        await refresh_clients_cache("ru")
+        
+    raw_data = cache["clients_raw"]["data"]
+    query = str(query).lower()
+    return raw_data.get(query)
 
 def get_subscribers():
     if not os.path.exists(SUBS_FILE):

@@ -19,7 +19,8 @@ from utils import (
     add_subscriber,
     remove_subscriber,
     get_subscribers,
-    get_client
+    get_client,
+    get_client_info
 )
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -77,8 +78,8 @@ async def cmd_status(message: types.Message):
 async def cmd_version(message: types.Message):
     lang = message.from_user.language_code
     v = await get_cached_versions()
-    tag_l, link_l = v["latest"]
-    tag_p, link_p = v["pre"]
+    tag_l, link_l, _ = v["latest"]
+    tag_p, link_p, _ = v["pre"]
     
     await message.answer(
         f"{get_msg('version_title', lang)}\n\n"
@@ -96,6 +97,56 @@ async def cmd_clients(message: types.Message):
         f"{get_msg('clients_title', lang)}\n\n{clients_text}",
         parse_mode="HTML"
     )
+
+@dp.message(F.text == "/changelog")
+async def cmd_changelog(message: types.Message):
+    v = await get_cached_versions()
+    tag_l, link_l, body_l = v["latest"]
+    
+    if body_l:
+        safe_body = body_l[:3500].replace("<", "&lt;").replace(">", "&gt;") + ("..." if len(body_l) > 3500 else "")
+    else:
+        safe_body = "Нет описания."
+        
+    await message.answer(
+        f"<b>Changelog: {tag_l}</b>\n\n<pre>{safe_body}</pre>\n\n<a href='{link_l}'>GitHub</a>",
+        parse_mode="HTML",
+        disable_web_page_preview=True
+    )
+
+from aiogram.filters import Command
+@dp.message(Command("client"))
+async def cmd_client(message: types.Message):
+    parts = message.text.split(maxsplit=1)
+    if len(parts) < 2:
+        await message.answer("Укажите ID или название клиента. Пример: <code>/client 47</code> или <code>/client Vanilla</code>", parse_mode="HTML")
+        return
+        
+    query = parts[1]
+    client_data = await get_client_info(query)
+    
+    if not client_data:
+        await message.answer(f"Клиент <b>{query}</b> не найден.", parse_mode="HTML")
+        return
+        
+    name = client_data.get("name", "Unknown")
+    version = client_data.get("version", "N/A")
+    c_id = client_data.get("id", "N/A")
+    file_name = client_data.get("filename", "N/A")
+    launches = client_data.get("launches", 0)
+    downloads = client_data.get("downloads", 0)
+    working = "Да" if client_data.get("working") else "Нет"
+    
+    text = (
+        f"<b>Клиент:</b> {name}\n"
+        f"<b>Версия:</b> {version}\n"
+        f"<b>ID:</b> {c_id}\n"
+        f"<b>Файл:</b> <code>{file_name}</code>\n"
+        f"<b>Работает:</b> {working}\n\n"
+        f"<b>Запусков:</b> {launches}\n"
+        f"<b>Скачиваний:</b> {downloads}"
+    )
+    await message.answer(text, parse_mode="HTML")
 
 @dp.message(F.text == "/subscribe")
 async def cmd_subscribe(message: types.Message):
@@ -117,8 +168,8 @@ async def inline_query_handler(query: types.InlineQuery):
     status_val = await get_cached_status(lang)
     v = await get_cached_versions()
     clients_val = await get_cached_clients(lang)
-    tag_l, link_l = v["latest"]
-    tag_p, link_p = v["pre"]
+    tag_l, link_l, _ = v["latest"]
+    tag_p, link_p, _ = v["pre"]
 
     all_ok = all("Online" in s for s in status_val.split("\n") if s)
     status_summary = get_msg("online" if all_ok else "error", lang)
