@@ -121,8 +121,8 @@ def draw_interface(bot_process):
     status_table.add_column("Key", style="bold #90E0EF", justify="right", width=25)
     status_table.add_column("Value", style="bold white", justify="left")
     
-    status_table.add_row("Bot Service Layer :", f"[{status_color}]{status_text}[/]")
-    status_table.add_row("Interpreter Engine :", f"[dim #CAF0F8]{escape(sys.version.split()[0])}[/]")
+    status_table.add_row("Bot Status :", f"[{status_color}]{status_text}[/]")
+    status_table.add_row("Python Version :", f"[dim #CAF0F8]{escape(sys.version.split()[0])}[/]")
     status_table.add_row("Working Directory :", f"[dim #CAF0F8]{escape(os.path.basename(os.getcwd()))}[/]")
 
     controls = Table(box=box.MINIMAL, expand=True, show_header=False, border_style="#00B4D8")
@@ -131,18 +131,18 @@ def draw_interface(bot_process):
     controls.add_column("Col3", justify="left")
     
     controls.add_row(
-        "🚀 [bold #00FF7F][ 1 ] START ENGINE[/]",
-        "📜 [bold #9370DB][ 4 ] LIVE LOGS[/]",
+        "[bold #00FF7F][ 1 ] START BOT[/]",
+        "[bold #9370DB][ 4 ] LIVE LOGS[/]",
         ""
     )
     controls.add_row(
-        "⏸️ [bold #FF3366][ 2 ] HALT ENGINE[/]",
-        "📊 [bold #FFA500][ 5 ] ANALYTICS[/]",
+        "[bold #FF3366][ 2 ] STOP BOT[/]",
+        "[bold #FFA500][ 5 ] STATISTICS[/]",
         ""
     )
     controls.add_row(
-        "🔄 [bold #FFD700][ 3 ] REBOOT SYSTEM[/]",
-        "🚪 [bold #FF00FF][ 6 ] EXIT[/]",
+        "[bold #FFD700][ 3 ] RESTART BOT[/]",
+        "[bold #FF00FF][ 6 ] EXIT[/]",
         ""
     )
 
@@ -194,24 +194,24 @@ def main_manager():
             
             if choice == '1':
                 if bot_process.poll() is not None:
-                    with console.status("[bold #00FF7F]Initializing Bot Core...[/]"):
+                    with console.status("[bold #00FF7F]Starting Bot...[/]"):
                         bot_process = start_bot()
                         time.sleep(1.5)
                 else:
-                    console.print("  [bold #FFD700]⚠️ Bot is already active![/]")
+                    console.print("  [bold #FFD700]Bot is already active![/]")
                     time.sleep(1)
                     
             elif choice == '2':
                 if bot_process.poll() is None: 
-                    with console.status("[bold #FF3366]Shutting down Bot Core...[/]"):
+                    with console.status("[bold #FF3366]Stopping Bot...[/]"):
                         bot_process.terminate()
                         time.sleep(1.5)
                 else:
-                    console.print("  [bold #FFD700]⚠️ Bot is already halted![/]")
+                    console.print("  [bold #FFD700]Bot is already halted![/]")
                     time.sleep(1)
                     
             elif choice == '3':
-                with console.status("[bold #FFD700]Rebooting system...[/]"):
+                with console.status("[bold #FFD700]Restarting Bot...[/]"):
                     if bot_process.poll() is None:
                         bot_process.terminate()
                         bot_process.wait()
@@ -220,10 +220,9 @@ def main_manager():
                     
             elif choice == '4':
                 clear_screen()
-                console.print(Panel("[bold #9370DB]🟢 LIVE ENGINE LOGS[/]\n[dim]Press ANY KEY to return to the main menu...[/]", border_style="#9370DB"))
+                console.print(Panel("[bold #9370DB]LIVE BOT LOGS[/]\n[dim]Press ANY KEY to return to the main menu...[/]", border_style="#9370DB"))
                 
                 import msvcrt
-                # Выводим последние 30 строк из имеющейся истории
                 snapshot = list(full_logs)
                 for line in snapshot[-30:]:
                     console.print(line)
@@ -236,9 +235,7 @@ def main_manager():
                         break
                     
                     if log_counter > last_seen_total:
-                        # Если пришли новые строки, печатаем их
                         new_lines_count = log_counter - last_seen_total
-                        # Чтобы индекс не вышел за границы deque (500), берем минимум
                         actual_to_print = min(new_lines_count, len(full_logs))
                         current_all_logs = list(full_logs)
                         for i in range(len(current_all_logs) - actual_to_print, len(current_all_logs)):
@@ -254,14 +251,14 @@ def main_manager():
                 
                 stats_table = Table(box=box.ROUNDED, show_header=False, border_style="#FFA500")
                 stats_table.add_row("Session Uptime :", uptime)
-                stats_table.add_row("Engines Spawned :", str(stats["engines_spawned"]))
+                stats_table.add_row("Bot Restarts :", str(stats["engines_spawned"]))
                 stats_table.add_row("Bot Starts (/start) :", str(bot_stats.get("start_count", 0)))
                 stats_table.add_row("Snippets Searched :", str(bot_stats.get("snippet_searches", 0)))
-                stats_table.add_row("System Health :", "[bold #00FF7F]EXCELLENT[/]")
+                stats_table.add_row("Bot Health :", "[bold #00FF7F]OK[/]")
                 
                 stats_panel = Panel(
                     Align.center(stats_table),
-                    title="[bold #FFA500] SESSION ANALYTICS [/]",
+                    title="[bold #FFA500] STATISTICS [/]",
                     border_style="#FFA500",
                     padding=(1, 4)
                 )
