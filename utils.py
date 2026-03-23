@@ -37,7 +37,7 @@ import json
 
 TRANSLATIONS = {
     "ru": {
-        "start": "<b>CollapseBot v1.5</b>\n\nВведите @{username} в любом чате для поиска сниппетов.\n\n<b>Команды:</b>\n/status - Состояние серверов\n/version - Версии лоадера\n/clients - Доступные клиенты\n/client <id> - Подробно о клиенте\n/changelog - Что нового\n/help - Справка",
+        "start": "<b>CollapseBot </b>\n\nВведите @{username} в любом чате для поиска сниппетов.\n\n<b>Команды:</b>\n/status - Состояние серверов\n/version - Версии лоадера\n/clients - Доступные клиенты\n/client &lt;id&gt; - Подробно о клиенте\n/changelog - Что нового\n/help - Справка",
         "help": "<b>Справка по CollapseBot:</b>\n\n<b>Основные команды:</b>\n/status - Текущее состояние серверов Atlas\n/version - Версии лоадера (stable / pre-release)\n/clients - Выборка доступных клиентов (Vanilla, Fabric, Forge)\n\n<b>Лоадер и Клиенты:</b>\n/changelog - Посмотреть, что нового в свежей версии лоадера\n/client <code>&lt;id/название&gt;</code> - Детальная статистика по клиенту (запуски, статус)\n\n<b>Уведомления:</b>\n/subscribe - Получать пуши о новых обновлениях и статусе серверов\n/unsubscribe - Отписаться от рассылки\n\n<b>Поиск параметров (Инлайн):</b>\nНапишите <code>@{username} запрос</code> в любом чате, чтобы найти руководство или сниппет лоадера.",
         "status_title": "<b>Статус серверов Collapse:</b>",
         "version_title": "<b>Версии CollapseLoader:</b>",
@@ -52,7 +52,7 @@ TRANSLATIONS = {
         "clients_empty": "Нет доступных клиентов."
     },
     "en": {
-        "start": "<b>CollapseBot v1.5</b>\n\nType @{username} in any chat to search snippets.\n\n<b>Commands:</b>\n/status - Server status\n/version - Loader versions\n/clients - Available clients\n/client <id> - Client details\n/changelog - What's new\n/help - Help message",
+        "start": "<b>CollapseBot </b>\n\nType @{username} in any chat to search snippets.\n\n<b>Commands:</b>\n/status - Server status\n/version - Loader versions\n/clients - Available clients\n/client &lt;id&gt; - Client details\n/changelog - What's new\n/help - Help message",
         "help": "<b>CollapseBot Help:</b>\n\n<b>Commands:</b>\n/status - Check Atlas server status\n/version - View loader versions\n/clients - View clients list \n\n<b>Loader & Clients:</b>\n/changelog - Check what's new in the latest loader update\n/client <code>&lt;id/name&gt;</code> - View detailed info about a specific client (launches, status)\n\n<b>Notifications:</b>\n/subscribe - Get push notifications for updates & downtime\n/unsubscribe - Opt out of notifications\n\n<b>Inline Search:</b>\nType <code>@{username} [query]</code> in any chat to search loader snippets.",
         "status_title": "<b>Collapse Server Status:</b>",
         "version_title": "<b>CollapseLoader Versions:</b>",
