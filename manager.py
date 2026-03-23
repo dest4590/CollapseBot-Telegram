@@ -1,8 +1,3 @@
-# Manager for CollapseBot
-# Author: W1xced, updated by Antigravity
-# Version: 2.5
-# Description: A robust manager for CollapseBot, featuring live log streaming, real-time analytics, and enhanced process safety for stable operation.
-
 import subprocess
 import sys
 import os
