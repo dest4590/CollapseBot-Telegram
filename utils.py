@@ -10,7 +10,8 @@ logger = logging.getLogger(__name__)
 
 cache = {
     "status": {"data": None, "time": 0},
-    "version": {"data": None, "time": 0}
+    "version": {"data": None, "time": 0},
+    "clients": {"data": None, "time": 0}
 }
 
 def load_snippets():
@@ -35,28 +36,34 @@ import json
 
 TRANSLATIONS = {
     "ru": {
-        "start": "🤖 <b>CollapseBot v1.4</b>\n\nВведите @{username} в любом чате для поиска сниппетов.\n\n<b>Команды:</b>\n📡 /status - Состояние серверов\n📦 /version - Версии лоадера\n🔔 /subscribe - Подписка на обновления\n🔕 /unsubscribe - Отписаться",
-        "status_title": "📊 <b>Статус серверов Collapse:</b>",
-        "version_title": "📦 <b>Версии CollapseLoader:</b>",
-        "stable": "✅ <b>Стабильная:</b>",
-        "pre": "🧪 <b>Пре-релиз:</b>",
-        "sub_ok": "✅ Вы подписались на уведомления об обновлениях!",
-        "unsub_ok": "🔕 Вы отписались от уведомлений.",
-        "new_update": "🚀 <b>Вышло обновление!</b>\n\nВерсия: <code>{tag}</code>\nСсылка: <a href='{url}'>GitHub</a>",
+        "start": "<b>CollapseBot v1.4</b>\n\nВведите @{username} в любом чате для поиска сниппетов.\n\n<b>Команды:</b>\n/status - Состояние серверов\n/version - Версии лоадера\n/clients - Доступные клиенты\n/subscribe - Подписка на обновления\n/unsubscribe - Отписаться\n/help - Справка",
+        "help": "<b>Справка по CollapseBot:</b>\n\n<b>Основные команды:</b>\n/status - Текущее состояние серверов Atlas\n/version - Версии лоадера (stable / pre-release)\n/clients - Выборка доступных клиентов (Vanilla, Fabric, Forge)\n\n<b>Уведомления:</b>\n/subscribe - Получать пуши о новых обновлениях и статусе серверов\n/unsubscribe - Отписаться от рассылки\n\n<b>Поиск параметров (Инлайн):</b>\nНапишите <code>@{username} запрос</code> в любом чате, чтобы найти нужное руководство или сниппет лоадера.",
+        "status_title": "<b>Статус серверов Collapse:</b>",
+        "version_title": "<b>Версии CollapseLoader:</b>",
+        "stable": "<b>Стабильная:</b>",
+        "pre": "<b>Пре-релиз:</b>",
+        "sub_ok": "Вы подписались на уведомления об обновлениях!",
+        "unsub_ok": "Вы отписались от уведомлений.",
+        "new_update": "<b>Вышло обновление!</b>\n\nВерсия: <code>{tag}</code>\nСсылка: <a href='{url}'>GitHub</a>",
         "online": "Онлайн",
         "error": "Ошибки",
+        "clients_title": "<b>Доступные клиенты:</b>",
+        "clients_empty": "Нет доступных клиентов."
     },
     "en": {
-        "start": "🤖 <b>CollapseBot v1.4</b>\n\nType @{username} in any chat to search snippets.\n\n<b>Commands:</b>\n📡 /status - Server status\n📦 /version - Loader versions\n🔔 /subscribe - Subscribe to updates\n🔕 /unsubscribe - Unsubscribe",
-        "status_title": "📊 <b>Collapse Server Status:</b>",
-        "version_title": "📦 <b>CollapseLoader Versions:</b>",
-        "stable": "✅ <b>Stable:</b>",
-        "pre": "🧪 <b>Pre-release:</b>",
-        "sub_ok": "✅ You have subscribed to update notifications!",
-        "unsub_ok": "🔕 You have unsubscribed from notifications.",
-        "new_update": "🚀 <b>New update available!</b>\n\nVersion: <code>{tag}</code>\nLink: <a href='{url}'>GitHub</a>",
+        "start": "<b>CollapseBot v1.4</b>\n\nType @{username} in any chat to search snippets.\n\n<b>Commands:</b>\n/status - Server status\n/version - Loader versions\n/clients - Available clients\n/subscribe - Subscribe to updates\n/unsubscribe - Unsubscribe\n/help - Help message",
+        "help": "<b>CollapseBot Help:</b>\n\n<b>Commands:</b>\n/status - Check Atlas server status\n/version - View loader versions\n/clients - View clients list \n\n<b>Notifications:</b>\n/subscribe - Get push notifications for updates & downtime\n/unsubscribe - Opt out of notifications\n\n<b>Inline Search:</b>\nType <code>@{username} [query]</code> in any chat to search loader snippets.",
+        "status_title": "<b>Collapse Server Status:</b>",
+        "version_title": "<b>CollapseLoader Versions:</b>",
+        "stable": "<b>Stable:</b>",
+        "pre": "<b>Pre-release:</b>",
+        "sub_ok": "You have subscribed to update notifications!",
+        "unsub_ok": "You have unsubscribed from notifications.",
+        "new_update": "<b>New update available!</b>\n\nVersion: <code>{tag}</code>\nLink: <a href='{url}'>GitHub</a>",
         "online": "Online",
         "error": "Error",
+        "clients_title": "<b>Available clients:</b>",
+        "clients_empty": "No clients available."
     }
 }
 
@@ -79,8 +86,10 @@ async def get_client():
 _cache_locks = {
     "status": asyncio.Lock(),
     "version": asyncio.Lock(),
+    "clients": asyncio.Lock(),
     "refresh_status": asyncio.Lock(),
-    "refresh_version": asyncio.Lock()
+    "refresh_version": asyncio.Lock(),
+    "refresh_clients": asyncio.Lock()
 }
 
 async def get_cached_status(lang="ru"):
@@ -104,7 +113,7 @@ async def get_cached_status(lang="ru"):
 async def refresh_status_cache(lang="ru"):
     if _cache_locks["refresh_status"].locked() and not _cache_locks["status"].locked():
          # Avoid redundant concurrent refreshes
-         return cache.get(f"status_{lang}", {}).get("data", "❌ Initializing...")
+         return cache.get(f"status_{lang}", {}).get("data", "Initializing...")
 
     async with _cache_locks["refresh_status"]:
         now = time.time()
@@ -120,11 +129,11 @@ async def refresh_status_cache(lang="ru"):
                 resp = await client.get(url)
                 elapsed = int((time.perf_counter() - start) * 1000)
                 if resp.status_code < 400:
-                    return f"✅ {name}: Online ({elapsed}ms)"
+                    return f"{name}: Online ({elapsed}ms)"
                 else:
-                    return f"⚠️ {name}: Error {resp.status_code} ({elapsed}ms)"
+                    return f"{name}: Error {resp.status_code} ({elapsed}ms)"
             except Exception:
-                return f"❌ {name}: Offline"
+                return f"{name}: Offline"
 
         try:
             client = await get_client()
@@ -136,7 +145,7 @@ async def refresh_status_cache(lang="ru"):
             return status
         except Exception as e:
             logger.error(f"Error refreshing status cache: {e}")
-            return cache.get(cache_key, {}).get("data", "❌ Error fetching status")
+            return cache.get(cache_key, {}).get("data", "Error fetching status")
 
 async def get_cached_versions():
     now = time.time()
@@ -178,6 +187,63 @@ async def refresh_version_cache():
         except Exception as e:
             logger.error(f"Error refreshing version cache: {e}")
             return cache["version"]["data"] or {"latest": ("N/A", ""), "pre": ("N/A", "")}
+
+async def get_cached_clients(lang="ru"):
+    now = time.time()
+    cache_key = f"clients_{lang}"
+    
+    if cache_key in cache and cache[cache_key].get("data"):
+        if now - cache[cache_key]["time"] > 300:
+            if not _cache_locks["refresh_clients"].locked():
+                asyncio.create_task(refresh_clients_cache(lang))
+        return cache[cache_key]["data"]
+    
+    async with _cache_locks["clients"]:
+        if cache_key in cache and cache[cache_key].get("data"):
+            return cache[cache_key]["data"]
+        return await refresh_clients_cache(lang)
+
+async def refresh_clients_cache(lang="ru"):
+    if _cache_locks["refresh_clients"].locked() and not _cache_locks["clients"].locked():
+        return cache.get(f"clients_{lang}", {}).get("data", get_msg("clients_empty", lang))
+
+    async with _cache_locks["refresh_clients"]:
+        now = time.time()
+        cache_key = f"clients_{lang}"
+        try:
+            urls = {
+                "Vanilla / Custom": "https://atlas.collapseloader.org/api/v1/clients",
+                "Fabric": "https://atlas.collapseloader.org/api/v1/fabric-clients",
+                "Forge": "https://atlas.collapseloader.org/api/v1/forge-clients"
+            }
+            client = await get_client()
+            
+            lines = []
+            for category, url in urls.items():
+                resp = await client.get(url)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    clients_list = data.get("data", [])
+                    if clients_list:
+                        lines.append(f"\n<b>{category}</b>:")
+                        for c in clients_list:
+                            name = c.get("name", "Unknown")
+                            version = c.get("version", "N/A")
+                            client_id = c.get("id", "N/A")
+                            lines.append(f"<b>{name}</b> (v{version}) - ID: {client_id}")
+                else:
+                    lines.append(f"\n<b>{category}</b>: Error {resp.status_code}")
+                    
+            if lines:
+                result = "\n".join(lines).strip()
+            else:
+                result = get_msg("clients_empty", lang)
+                
+            cache[cache_key] = {"data": result, "time": now}
+            return result
+        except Exception as e:
+            logger.error(f"Error refreshing clients cache: {e}")
+            return cache.get(cache_key, {}).get("data", get_msg("clients_empty", lang))
 
 
 SUBS_FILE = "subscribers.json"
