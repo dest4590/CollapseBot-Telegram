@@ -250,12 +250,39 @@ def main_manager():
     bot_process = start_bot()
     start_tunnel()
     
+    import msvcrt
+    global _tunnel_url
+    last_tunnel_url = _tunnel_url
+    
     try:
         while True:
+            last_bot_status = bot_process.poll() is None
+            
             clear_screen()
             console.print(draw_interface(bot_process))
+            console.print("  [bold #00D4FF]❯❯ Select Operation (1-6):[/] ", end="")
+            sys.stdout.flush()
             
-            choice = console.input("  [bold #00D4FF]❯❯ Select Operation:[/] ")
+            choice = None
+            while True:
+                if msvcrt.kbhit():
+                    char = msvcrt.getch().decode('utf-8', errors='ignore')
+                    if char in ['1', '2', '3', '4', '5', '6']:
+                        choice = char
+                        print(choice) # echo key
+                        time.sleep(0.2)
+                        break
+                
+                # Check for state changes to refresh UI automatically
+                current_running = bot_process.poll() is None
+                if _tunnel_url != last_tunnel_url or current_running != last_bot_status:
+                    last_tunnel_url = _tunnel_url
+                    break
+                    
+                time.sleep(0.1)
+                
+            if choice is None:
+                continue # loop around to redraw screen
             
             if choice == '1':
                 if bot_process.poll() is not None:
@@ -329,7 +356,11 @@ def main_manager():
                     padding=(1, 4)
                 )
                 console.print(stats_panel)
-                console.input("\n  [dim]Press ENTER to return...[/]")
+                console.print("\n  [dim]Press ANY KEY to return...[/]")
+                import msvcrt
+                while msvcrt.kbhit(): msvcrt.getch()
+                while not msvcrt.kbhit(): time.sleep(0.05)
+                msvcrt.getch()
                 
             elif choice == '6':
                 cleanup()
