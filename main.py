@@ -4,8 +4,10 @@ import os
 import subprocess
 import json
 import time
+from aiohttp import web
 from aiogram import Bot, Dispatcher, types, F
-from aiogram.types import InlineQueryResultArticle, InputTextMessageContent
+from aiogram.types import InlineQueryResultArticle, InputTextMessageContent, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types.web_app_info import WebAppInfo
 from aiogram.filters import CommandStart
 from config import BOT_TOKEN, ADMIN_ID
 from thefuzz import process, fuzz
@@ -46,14 +48,41 @@ def increment_stat(stat_name):
     except Exception as e:
         logger.error(f"Error updating stats: {e}")
 
+def get_webapp_url():
+    try:
+        with open(".env", "r", encoding="utf-8") as f:
+            for line in f:
+                if line.startswith("WEBAPP_URL="):
+                    return line.strip().split("=", 1)[1]
+    except Exception:
+        pass
+    return os.environ.get("WEBAPP_URL", "https://placeholder.loca.lt")
+
 @dp.message(CommandStart())
 async def cmd_start(message: types.Message):
     increment_stat("start_count")
     bot_info = await bot.get_me()
     lang = message.from_user.language_code
+    url = get_webapp_url()
+    markup = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🕹 Открыть Дашборд", web_app=WebAppInfo(url=url))]
+    ])
     await message.answer(
         get_msg("start", lang, username=bot_info.username),
-        parse_mode="HTML"
+        parse_mode="HTML",
+        reply_markup=markup
+    )
+
+@dp.message(F.text == "/app")
+async def cmd_app(message: types.Message):
+    url = get_webapp_url()
+    markup = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🕹 Открыть Дашборд", web_app=WebAppInfo(url=url))]
+    ])
+    await message.answer(
+        "<b>Collapse Dashboard:</b>\n\nСмотрите статус, версии и список клиентов в удобном веб-интерфейсе!",
+        parse_mode="HTML",
+        reply_markup=markup
     )
 
 @dp.message(F.text == "/help")
@@ -356,7 +385,40 @@ async def server_monitor_task():
             
         await asyncio.sleep(60)
 
+async def api_status(request):
+    status_text = await get_cached_status("ru")
+    return web.json_response({"status": status_text})
+
+async def api_versions(request):
+    v = await get_cached_versions()
+    return web.json_response(v)
+
+async def api_clients(request):
+    clients_text = await get_cached_clients("ru")
+    return web.json_response({"clients": clients_text})
+
+async def handle_index(request):
+    return web.FileResponse('webapp/index.html')
+
+async def start_webapp_server():
+    app = web.Application()
+    app.router.add_get('/api/status', api_status)
+    app.router.add_get('/api/versions', api_versions)
+    app.router.add_get('/api/clients', api_clients)
+    
+    if os.path.exists("webapp"):
+        app.router.add_get('/', handle_index)
+        app.router.add_static('/', 'webapp')
+        logger.info("Serving static WebApp files from 'webapp' directory")
+        
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, '127.0.0.1', 8085)
+    await site.start()
+    logger.info("WebApp server started locally on http://127.0.0.1:8085")
+
 async def main():
+    asyncio.create_task(start_webapp_server())
     bot_info = await bot.get_me()
     logger.info(f"Starting bot @{bot_info.username}")
     asyncio.create_task(get_cached_status("ru"))
