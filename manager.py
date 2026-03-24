@@ -269,11 +269,10 @@ def main_manager():
                     char = msvcrt.getch().decode('utf-8', errors='ignore')
                     if char in ['1', '2', '3', '4', '5', '6']:
                         choice = char
-                        print(choice) # echo key
+                        print(choice) 
                         time.sleep(0.2)
                         break
                 
-                # Check for state changes to refresh UI automatically
                 current_running = bot_process.poll() is None
                 if _tunnel_url != last_tunnel_url or current_running != last_bot_status:
                     last_tunnel_url = _tunnel_url
@@ -282,7 +281,7 @@ def main_manager():
                 time.sleep(0.1)
                 
             if choice is None:
-                continue # loop around to redraw screen
+                continue 
             
             if choice == '1':
                 if bot_process.poll() is not None:
@@ -321,6 +320,10 @@ def main_manager():
                     console.print(line)
                 
                 last_seen_total = log_counter
+                
+                # Очищаем буфер от случайных нажатий (например Enter)
+                while msvcrt.kbhit():
+                    msvcrt.getch()
                 
                 while True:
                     if msvcrt.kbhit():
