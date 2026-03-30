@@ -32,7 +32,7 @@ A simple and efficient Telegram bot built with Python.
 ### CLI Design statistics
 
 <div align="center">
-  <img src="assets/stat.png" width="900"/>
+  <img src="assets/stat.png" width="400"/>
 </div>
 
 ### Design mini app
