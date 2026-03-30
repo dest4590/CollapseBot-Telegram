@@ -1,68 +1,452 @@
 import asyncio
 import logging
-import yaml
+import os
+import subprocess
+import json
+import time
+from aiohttp import web
 from aiogram import Bot, Dispatcher, types, F
-from aiogram.types import InlineQueryResultArticle, InputTextMessageContent
+from aiogram.types import InlineQueryResultArticle, InputTextMessageContent, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types.web_app_info import WebAppInfo
 from aiogram.filters import CommandStart
-from config import BOT_TOKEN
+from config import BOT_TOKEN, ADMIN_ID
+from thefuzz import process, fuzz
+from utils import (
+    load_snippets, 
+    safe_format, 
+    get_cached_status, 
+    get_cached_versions,
+    get_cached_clients,
+    get_msg,
+    add_subscriber,
+    remove_subscriber,
+    get_subscribers,
+    get_client,
+    get_client_info
+)
 
-logging.basicConfig(level=logging.INFO)
-
-
-def load_snippets():
-    with open("snippets.yaml", "r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
-
-
-snippets = load_snippets()
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
+snippets = load_snippets()
 
+STATS_FILE = "stats.json"
+
+def increment_stat(stat_name):
+    try:
+        stats = {}
+        if os.path.exists(STATS_FILE):
+            with open(STATS_FILE, "r", encoding="utf-8") as f:
+                stats = json.load(f)
+        
+        stats[stat_name] = stats.get(stat_name, 0) + 1
+        
+        with open(STATS_FILE, "w", encoding="utf-8") as f:
+            json.dump(stats, f)
+    except Exception as e:
+        logger.error(f"Error updating stats: {e}")
+
+def get_webapp_url():
+    try:
+        with open(".env", "r", encoding="utf-8") as f:
+            for line in f:
+                if line.startswith("WEBAPP_URL="):
+                    return line.strip().split("=", 1)[1]
+    except Exception:
+        pass
+    return os.environ.get("WEBAPP_URL", "https://placeholder.loca.lt")
 
 @dp.message(CommandStart())
 async def cmd_start(message: types.Message):
+    increment_stat("start_count")
+    bot_info = await bot.get_me()
+    lang = message.from_user.language_code
+    url = get_webapp_url()
+    markup = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🕹 Открыть Дашборд", web_app=WebAppInfo(url=url))]
+    ])
     await message.answer(
-        "Hello! I am an inline bot. Type @CollapseLoader_bot to see my snippets."
+        get_msg("start", lang, username=bot_info.username),
+        parse_mode="HTML",
+        reply_markup=markup
     )
 
+@dp.message(F.text == "/app")
+async def cmd_app(message: types.Message):
+    url = get_webapp_url()
+    markup = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🕹 Открыть Дашборд", web_app=WebAppInfo(url=url))]
+    ])
+    await message.answer(
+        "<b>Collapse Dashboard:</b>\n\nСмотрите статус, версии и список клиентов в удобном веб-интерфейсе!",
+        parse_mode="HTML",
+        reply_markup=markup
+    )
+
+@dp.message(F.text == "/help")
+async def cmd_help(message: types.Message):
+    bot_info = await bot.get_me()
+    lang = message.from_user.language_code
+    await message.answer(
+        get_msg("help", lang, username=bot_info.username),
+        parse_mode="HTML"
+    )
+
+@dp.message(F.text == "/status")
+async def cmd_status(message: types.Message):
+    lang = message.from_user.language_code
+    status_text = await get_cached_status(lang)
+    await message.answer(
+        f"{get_msg('status_title', lang)}\n\n{status_text}",
+        parse_mode="HTML"
+    )
+
+@dp.message(F.text == "/version")
+async def cmd_version(message: types.Message):
+    lang = message.from_user.language_code
+    v = await get_cached_versions()
+    tag_l, link_l, _ = v["latest"]
+    tag_p, link_p, _ = v["pre"]
+    
+    await message.answer(
+        f"{get_msg('version_title', lang)}\n\n"
+        f"{get_msg('stable', lang)} <code>{tag_l}</code> (<a href='{link_l}'>GitHub</a>)\n"
+        f"{get_msg('pre', lang)} <code>{tag_p}</code> (<a href='{link_p}'>GitHub</a>)",
+        parse_mode="HTML",
+        disable_web_page_preview=True
+    )
+
+@dp.message(F.text == "/clients")
+async def cmd_clients(message: types.Message):
+    lang = message.from_user.language_code
+    clients_text = await get_cached_clients(lang)
+    await message.answer(
+        f"{get_msg('clients_title', lang)}\n\n{clients_text}",
+        parse_mode="HTML"
+    )
+
+@dp.message(F.text == "/changelog")
+async def cmd_changelog(message: types.Message):
+    v = await get_cached_versions()
+    tag_l, link_l, body_l = v["latest"]
+    
+    if body_l:
+        safe_body = body_l[:3500].replace("<", "&lt;").replace(">", "&gt;") + ("..." if len(body_l) > 3500 else "")
+    else:
+        safe_body = "Нет описания."
+        
+    await message.answer(
+        f"<b>Changelog: {tag_l}</b>\n\n<pre>{safe_body}</pre>\n\n<a href='{link_l}'>GitHub</a>",
+        parse_mode="HTML",
+        disable_web_page_preview=True
+    )
+
+from aiogram.filters import Command
+@dp.message(Command("client"))
+async def cmd_client(message: types.Message):
+    parts = message.text.split(maxsplit=1)
+    if len(parts) < 2:
+        await message.answer("Укажите ID или название клиента. Пример: <code>/client 47</code> или <code>/client Vanilla</code>", parse_mode="HTML")
+        return
+        
+    query = parts[1]
+    client_data = await get_client_info(query)
+    
+    if not client_data:
+        await message.answer(f"Клиент <b>{query}</b> не найден.", parse_mode="HTML")
+        return
+        
+    name = client_data.get("name", "Unknown")
+    version = client_data.get("version", "N/A")
+    c_id = client_data.get("id", "N/A")
+    file_name = client_data.get("filename", "N/A")
+    launches = client_data.get("launches", 0)
+    downloads = client_data.get("downloads", 0)
+    working = "Да" if client_data.get("working") else "Нет"
+    
+    text = (
+        f"<b>Клиент:</b> {name}\n"
+        f"<b>Версия:</b> {version}\n"
+        f"<b>ID:</b> {c_id}\n"
+        f"<b>Файл:</b> <code>{file_name}</code>\n"
+        f"<b>Работает:</b> {working}\n\n"
+        f"<b>Запусков:</b> {launches}\n"
+        f"<b>Скачиваний:</b> {downloads}"
+    )
+    await message.answer(text, parse_mode="HTML")
+
+@dp.message(F.text == "/subscribe")
+async def cmd_subscribe(message: types.Message):
+    add_subscriber(message.from_user.id)
+    await message.answer(get_msg("sub_ok", message.from_user.language_code))
+
+@dp.message(F.text == "/unsubscribe")
+async def cmd_unsubscribe(message: types.Message):
+    remove_subscriber(message.from_user.id)
+    await message.answer(get_msg("unsub_ok", message.from_user.language_code))
 
 @dp.inline_query()
 async def inline_query_handler(query: types.InlineQuery):
+    increment_stat("snippet_searches")
     query_text = query.query.lower().strip()
+    lang = query.from_user.language_code
     results = []
 
-    for key, data in snippets.items():
-        title = data.get("title", key)
-        content = data.get("content", "")
+    status_val = await get_cached_status(lang)
+    v = await get_cached_versions()
+    clients_val = await get_cached_clients(lang)
+    tag_l, link_l, _ = v["latest"]
+    tag_p, link_p, _ = v["pre"]
 
-        if (
-            query_text in key.lower()
-            or query_text in title.lower()
-            or query_text in content.lower()
-        ):
+    all_ok = all("Online" in s for s in status_val.split("\n") if s)
+    status_summary = get_msg("online" if all_ok else "error", lang)
 
-            description = content.split("\n")[0] if content else "No content"
-            if len(description) > 50:
-                description = description[:47] + "..."
+    dynamic_items = [
+        {
+            "id": "dynamic_status",
+            "title": f"{get_msg('status_title', lang).replace('<b>', '').replace('</b>', '')} {status_summary}",
+            "description": "Atlas, Auth, API",
+            "msg": f"{get_msg('status_title', lang)}\n\n{status_val}",
+            "keywords": ["status", "статус", "сервер", "server", "атлас", "atlas", "auth", "api"]
+        },
+        {
+            "id": "dynamic_versions",
+            "title": f"{tag_l} | {tag_p}",
+            "description": get_msg('version_title', lang).replace('<b>', '').replace('</b>', ''),
+            "msg": (
+                f"{get_msg('version_title', lang)}\n\n"
+                f"{get_msg('stable', lang)} <code>{tag_l}</code> (<a href='{link_l}'>GitHub</a>)\n"
+                f"{get_msg('pre', lang)} <code>{tag_p}</code> (<a href='{link_p}'>GitHub</a>)"
+            ),
+            "keywords": ["version", "версия", "update", "обнова", "pre", "пре", "релиз"]
+        },
+        {
+            "id": "dynamic_clients",
+            "title": f"{get_msg('clients_title', lang).replace('<b>', '').replace('</b>', '')}",
+            "description": "Список клиентов",
+            "msg": f"{get_msg('clients_title', lang)}\n\n{clients_val}",
+            "keywords": ["clients", "клиенты", "список"]
+        }
+    ]
 
+    if not query_text:
+        for item in dynamic_items:
             results.append(
                 InlineQueryResultArticle(
-                    id=key,
-                    title=title,
-                    description=description,
+                    id=item["id"],
+                    title=item["title"],
+                    description=item["description"],
                     input_message_content=InputTextMessageContent(
-                        message_text=content, parse_mode="Markdown"
-                    ),
+                        message_text=item["msg"], parse_mode="HTML", disable_web_page_preview=True
+                    )
                 )
             )
+    else:
+        for item in dynamic_items:
+            if any(k in query_text for k in item["keywords"]):
+                results.append(
+                    InlineQueryResultArticle(
+                        id=item["id"],
+                        title=item["title"],
+                        description=item["description"],
+                        input_message_content=InputTextMessageContent(
+                            message_text=item["msg"], parse_mode="HTML", disable_web_page_preview=True
+                        )
+                    )
+                )
 
-    await query.answer(results[:50], cache_time=1)
+    choices = []
+    for key, data in snippets.items():
+        if key in ["status", "version", "clients"]:
+            continue
+        search_text = f"{key} {data.get('title', '')} {data.get('content', '')}".lower()
+        choices.append((key, search_text))
 
+    if query_text:
+        matches = process.extract(
+            query_text, 
+            {k: s for k, s in choices}, 
+            limit=15, 
+            scorer=fuzz.partial_token_set_ratio
+        )
+        matched_keys = [m[2] for m in matches if m[1] > 40]
+    else:
+        matched_keys = [k for k in snippets.keys() if k not in ["status", "version", "clients"]]
+
+    for key in matched_keys:
+        data = snippets.get(key)
+        if not data: continue
+        
+        title = data.get("title", key)
+        content = data.get("content", "")
+        description = content.split("\n")[0] if content else "No content"
+        
+        if len(description) > 50:
+            description = description[:47] + "..."
+
+        formatted_content = safe_format(content)
+
+        results.append(
+            InlineQueryResultArticle(
+                id=key,
+                title=title,
+                description=description,
+                input_message_content=InputTextMessageContent(
+                    message_text=formatted_content, parse_mode="HTML"
+                ),
+            )
+        )
+
+    try:
+        await query.answer(results[:50], cache_time=5)
+    except Exception as e:
+        logger.debug(f"Could not answer inline query: {e}")
+
+async def check_updates_task():
+    last_tag = None
+    while True:
+        try:
+            v = await get_cached_versions()
+            tag = v["latest"][0]
+            url = v["latest"][1]
+            
+            if last_tag is None:
+                last_tag = tag
+                
+            if tag != last_tag and tag != "N/A":
+                last_tag = tag
+                logger.info(f"New version detected: {tag}")
+                subs = get_subscribers()
+                for user_id in subs:
+                    try:
+                        await bot.send_message(
+                            user_id, 
+                            get_msg("new_update", "ru", tag=tag, url=url),
+                            parse_mode="HTML"
+                        )
+                    except Exception as e:
+                        logger.error(f"Failed to notify {user_id}: {e}")
+        except Exception as e:
+            logger.error(f"Error in check_updates_task: {e}")
+        
+        await asyncio.sleep(1800)
+
+async def server_monitor_task():
+    last_status = "online"
+    offline_start_time = 0
+    
+    while True:
+        try:
+            client = await get_client()
+            url = "https://atlas.collapseloader.org"
+            
+            try:
+                resp = await client.get(url, timeout=10.0)
+                is_online = resp.status_code < 400
+            except Exception:
+                is_online = False
+                
+            current_status = "online" if is_online else "offline"
+            
+            if current_status == "offline" and last_status == "online":
+                offline_start_time = time.time()
+                last_status = "offline"
+                logger.warning("Atlas Server went offline! Notifying subscribers.")
+                subs = get_subscribers()
+                for user_id in subs:
+                    try:
+                        await bot.send_message(
+                            chat_id=user_id,
+                            text="<b>CRITICAL: Сервер Atlas временно недоступен!</b>\n\nСлужба не отвечает на запросы, возможны перебои в работе лоадера.",
+                            parse_mode="HTML"
+                        )
+                    except Exception as e:
+                        logger.error(f"Failed to notify {user_id}: {e}")
+
+            elif current_status == "online" and last_status == "offline":
+                downtime = int((time.time() - offline_start_time) / 60)
+                last_status = "online"
+                logger.info("Atlas Server is back online! Notifying subscribers.")
+                subs = get_subscribers()
+                for user_id in subs:
+                    try:
+                        await bot.send_message(
+                            chat_id=user_id,
+                            text=f"<b>Сервер восстановлен!</b>\n\nСистемы Atlas снова работают стабильно. Примерное время простоя: {downtime} мин.",
+                            parse_mode="HTML"
+                        )
+                    except Exception as e:
+                        logger.error(f"Failed to notify {user_id}: {e}")
+                    
+        except Exception as e:
+            logger.error(f"Error in server_monitor_task: {e}")
+            
+        await asyncio.sleep(60)
+
+async def api_status(request):
+    status_text = await get_cached_status("ru")
+    return web.json_response({"status": status_text})
+
+async def api_versions(request):
+    v = await get_cached_versions()
+    return web.json_response(v)
+
+async def api_clients(request):
+    clients_text = await get_cached_clients("ru")
+    return web.json_response({"clients": clients_text})
+
+async def handle_index(request):
+    return web.FileResponse('webapp/index.html')
+
+async def start_webapp_server():
+    app = web.Application()
+    app.router.add_get('/api/status', api_status)
+    app.router.add_get('/api/versions', api_versions)
+    app.router.add_get('/api/clients', api_clients)
+    
+    if os.path.exists("webapp"):
+        app.router.add_get('/', handle_index)
+        app.router.add_static('/', 'webapp')
+        logger.info("Serving static WebApp files from 'webapp' directory")
+        
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, '127.0.0.1', 8085)
+    await site.start()
+    logger.info("WebApp server started locally on http://127.0.0.1:8085")
 
 async def main():
+    asyncio.create_task(start_webapp_server())
+    bot_info = await bot.get_me()
+    logger.info(f"Starting bot @{bot_info.username}")
+    asyncio.create_task(get_cached_status("ru"))
+    asyncio.create_task(get_cached_status("en"))
+    asyncio.create_task(get_cached_clients("ru"))
+    asyncio.create_task(get_cached_clients("en"))
+    asyncio.create_task(get_cached_versions())
+
+    asyncio.create_task(check_updates_task())
+    asyncio.create_task(server_monitor_task())
     await dp.start_polling(bot)
 
-
 if __name__ == "__main__":
-    asyncio.run(main())
+    import sys
+    
+    if "--worker" in sys.argv or os.name != 'nt' or os.environ.get("DOCKER_ENV"):
+        try:
+            if os.name == 'nt':
+                os.system(f"title CollapseBot Logs")
+            
+            asyncio.run(main())
+        except (KeyboardInterrupt, SystemExit):
+            logger.info("Bot stopped!")
+    else:
+        try:
+            subprocess.Popen(
+                [sys.executable, "manager.py"], 
+                creationflags=subprocess.CREATE_NEW_CONSOLE
+            )
+        except Exception as e:
+            asyncio.run(main())
