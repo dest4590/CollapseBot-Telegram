@@ -54,9 +54,67 @@ def clear_screen():
     os.system('cls' if os.name == 'nt' else 'clear')
 
 _current_bot_process = None
+_current_tunnel_process = None
+_tunnel_url = "Not Started"
+
+def update_env_url(url):
+    try:
+        if os.path.exists(".env"):
+            with open(".env", "r", encoding="utf-8") as f:
+                content = f.read()
+            import re
+            new_content = re.sub(r'(?m)^WEBAPP_URL=.*$', '', content).strip()
+            new_content += f'\nWEBAPP_URL={url}\n'
+            with open(".env", "w", encoding="utf-8") as f:
+                f.write(new_content)
+        else:
+            with open(".env", "w", encoding="utf-8") as f:
+                f.write(f'WEBAPP_URL={url}\n')
+    except Exception as e:
+        full_logs.append(f"Failed to update .env: {e}")
+
+def tunnel_reader(pipe):
+    global log_counter, _tunnel_url
+    import re
+    try:
+        for line in iter(pipe.readline, ''):
+            if not line: break
+            decoded = line.strip()
+            full_logs.append("[TUNNEL] " + decoded)
+            log_counter += 1
+            
+            match = re.search(r'(https://[a-zA-Z0-9-]+\.lhr\.life|https://[a-zA-Z0-9-]+\.serveo\.net|https://[a-zA-Z0-9-]+\.serveousercontent\.com)', decoded)
+            if match:
+                _tunnel_url = match.group(1)
+                update_env_url(_tunnel_url)
+    except Exception:
+        pass
+    pipe.close()
+
+def start_tunnel():
+    global _current_tunnel_process, _tunnel_url
+    if _current_tunnel_process and _current_tunnel_process.poll() is None:
+        try:
+            _current_tunnel_process.terminate()
+        except:
+            pass
+            
+    _tunnel_url = "Connecting..."
+    cmd = ["ssh", "-o", "StrictHostKeyChecking=no", "-R", "80:127.0.0.1:8085", "nokey@localhost.run"]
+    process = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+        stdin=subprocess.DEVNULL,
+        creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0x08000000) if os.name == 'nt' else 0
+    )
+    _current_tunnel_process = process
+    threading.Thread(target=tunnel_reader, args=(process.stdout,), daemon=True).start()
 
 def cleanup():
-    global _current_bot_process
+    global _current_bot_process, _current_tunnel_process
     if _current_bot_process and _current_bot_process.poll() is None:
         try:
             _current_bot_process.terminate()
@@ -65,6 +123,16 @@ def cleanup():
             try:
                 _current_bot_process.kill()
             except Exception:
+                pass
+                
+    if _current_tunnel_process and _current_tunnel_process.poll() is None:
+        try:
+            _current_tunnel_process.terminate()
+            _current_tunnel_process.wait(timeout=2)
+        except:
+            try:
+                _current_tunnel_process.kill()
+            except:
                 pass
 
 atexit.register(cleanup)
@@ -117,6 +185,7 @@ def draw_interface(bot_process):
     status_table.add_column("Value", style="bold white", justify="left")
     
     status_table.add_row("Bot Status :", f"[{status_color}]{status_text}[/]")
+    status_table.add_row("WebApp Tunnel :", f"[bold #00FF7F]{escape(_tunnel_url)}[/]")
     status_table.add_row("Python Version :", f"[dim #CAF0F8]{escape(sys.version.split()[0])}[/]")
     status_table.add_row("Working Directory :", f"[dim #CAF0F8]{escape(os.path.basename(os.getcwd()))}[/]")
 
@@ -179,13 +248,40 @@ def get_bot_stats():
 
 def main_manager():
     bot_process = start_bot()
+    start_tunnel()
+    
+    import msvcrt
+    global _tunnel_url
+    last_tunnel_url = _tunnel_url
     
     try:
         while True:
+            last_bot_status = bot_process.poll() is None
+            
             clear_screen()
             console.print(draw_interface(bot_process))
+            console.print("  [bold #00D4FF]❯❯ Select Operation (1-6):[/] ", end="")
+            sys.stdout.flush()
             
-            choice = console.input("  [bold #00D4FF]❯❯ Select Operation:[/] ")
+            choice = None
+            while True:
+                if msvcrt.kbhit():
+                    char = msvcrt.getch().decode('utf-8', errors='ignore')
+                    if char in ['1', '2', '3', '4', '5', '6']:
+                        choice = char
+                        print(choice) 
+                        time.sleep(0.2)
+                        break
+                
+                current_running = bot_process.poll() is None
+                if _tunnel_url != last_tunnel_url or current_running != last_bot_status:
+                    last_tunnel_url = _tunnel_url
+                    break
+                    
+                time.sleep(0.1)
+                
+            if choice is None:
+                continue 
             
             if choice == '1':
                 if bot_process.poll() is not None:
@@ -211,6 +307,7 @@ def main_manager():
                         bot_process.terminate()
                         bot_process.wait()
                     bot_process = start_bot()
+                    start_tunnel()
                     time.sleep(1.5)
                     
             elif choice == '4':
@@ -223,6 +320,10 @@ def main_manager():
                     console.print(line)
                 
                 last_seen_total = log_counter
+                
+                # Очищаем буфер от случайных нажатий (например Enter)
+                while msvcrt.kbhit():
+                    msvcrt.getch()
                 
                 while True:
                     if msvcrt.kbhit():
@@ -258,7 +359,11 @@ def main_manager():
                     padding=(1, 4)
                 )
                 console.print(stats_panel)
-                console.input("\n  [dim]Press ENTER to return...[/]")
+                console.print("\n  [dim]Press ANY KEY to return...[/]")
+                import msvcrt
+                while msvcrt.kbhit(): msvcrt.getch()
+                while not msvcrt.kbhit(): time.sleep(0.05)
+                msvcrt.getch()
                 
             elif choice == '6':
                 cleanup()
