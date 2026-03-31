@@ -1,0 +1,11 @@
+services:
+  collapsebot-telegram:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: collapsebot-telegram
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
