@@ -1,3 +1,7 @@
+# 06.04.2026
+Not worked -> Mini app
+Not worked -> utils
+
 # CollapseBot-Telegram
 
 A simple and efficient Telegram bot built with Python.
